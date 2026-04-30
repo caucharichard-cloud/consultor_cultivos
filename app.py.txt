@@ -1,0 +1,74 @@
+import streamlit as st
+import pandas as pd
+
+# Configuración de la página
+st.set_page_config(page_title="Consulta de Desempeño Agrícola", layout="wide")
+
+def cargar_datos(archivo):
+    try:
+        df = pd.read_excel(archivo)
+        # Limpieza básica: asegurar que las métricas sean numéricas
+        columnas_metricas = ['Área sembrada (ha)', 'Área cosechada (ha)', 'Producción (t)']
+        for col in columnas_metricas:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        return df
+    except Exception as e:
+        st.error(f"Error al cargar el archivo: {e}")
+        return None
+
+def main():
+    st.title("🚜 Consulta de Desempeño Agrícola (2019 - 2024)")
+    st.markdown("---")
+
+    # Nombre del archivo (Debe estar en tu repo de GitHub)
+    archivo_excel = '20250617_BaseAgricola20192024.xlsx'
+    
+    # Sidebar para filtros
+    st.sidebar.header("Filtros de Búsqueda")
+    
+    df = cargar_datos(archivo_excel)
+
+    if df is not None:
+        # Inputs de usuario en la barra lateral
+        depto_input = st.sidebar.text_input("1. Departamento", placeholder="Ej: Antioquia").strip()
+        cultivo_input = st.sidebar.text_input("2. Cultivo", placeholder="Ej: Aguacate").strip()
+
+        if depto_input and cultivo_input:
+            # Filtrado de datos
+            filtro = (df['Departamento'].str.contains(depto_input, case=False, na=False)) & \
+                     (df['Cultivo'].str.contains(cultivo_input, case=False, na=False))
+            
+            df_filtrado = df[filtro].copy()
+
+            if df_filtrado.empty:
+                st.warning(f"No se encontraron registros para '{cultivo_input}' en '{depto_input}'.")
+            else:
+                st.subheader(f"Resultados para {cultivo_input} en {depto_input}")
+                
+                # 1. Resumen Anual
+                columnas_metricas = ['Área sembrada (ha)', 'Área cosechada (ha)', 'Producción (t)']
+                columnas_presentes = [c for c in columnas_metricas if c in df_filtrado.columns]
+                
+                if 'Año' in df_filtrado.columns:
+                    resumen_anual = df_filtrado.groupby('Año')[columnas_presentes].sum().reset_index()
+                    
+                    st.markdown("### --- RESUMEN DEPARTAMENTAL POR AÑO ---")
+                    st.dataframe(resumen_anual, use_container_width=True)
+
+                    # Extra: Un gráfico rápido de producción
+                    if 'Producción (t)' in resumen_anual.columns:
+                        st.line_chart(data=resumen_anual, x='Año', y='Producción (t)')
+
+                # 2. Detalle Municipal
+                st.markdown("---")
+                with st.expander("Ver detalle desglosado por Municipio"):
+                    columnas_detalle = ['Año', 'Municipio', 'Cultivo', 'Área sembrada (ha)', 
+                                        'Área cosechada (ha)', 'Producción (t)', 'Rendimiento (t/ha)']
+                    cols_finales = [col for col in columnas_detalle if col in df_filtrado.columns]
+                    st.write(df_filtrado[cols_finales])
+        else:
+            st.info("Por favor, ingresa un Departamento y un Cultivo en la barra lateral para comenzar.")
+
+if __name__ == "__main__":
+    main()
